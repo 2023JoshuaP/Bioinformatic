@@ -27,54 +27,56 @@ Smith Waterman algorithm for local sequence alignment. It finds the best local a
 */
 
 AlignmentResult smith_waterman(const std::string &sequence_1, const std::string &sequence_2, int match_score, int mismatch_penalty, int gap_penalty) {
-    std::vector<std::vector<int>> score_matrix_h(sequence_1.length() + 1, std::vector<int>(sequence_2.length() + 1, 0));
+    int n = (int)sequence_1.length();
+    int m = (int)sequence_2.length();
+    int max_score = 0, end_i = 0, end_j = 0;
 
-    for (int i = 1; i <= sequence_1.length(); i++) {
-        for (int j = 1; j <= sequence_2.length(); j++) {
-            int score_diagonal = score_matrix_h[i - 1][j - 1] + (sequence_1[i - 1] == sequence_2[j - 1] ? match_score : mismatch_penalty);
-            int score_up = score_matrix_h[i - 1][j] + gap_penalty;
-            int score_left = score_matrix_h[i][j - 1] + gap_penalty;
-            score_matrix_h[i][j] = std::max({0, score_diagonal, score_up, score_left});
-        }
-    }
+    std::vector<std::vector<int>> score_matrix(n + 1, std::vector<int>(m + 1, 0));
 
-    int max_score = 0;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            int diagonal_score = score_matrix[i - 1][j - 1] + (sequence_1[i - 1] == sequence_2[j - 1] ? match_score : mismatch_penalty);
+            int up_score = score_matrix[i - 1][j] + gap_penalty;
+            int left_score = score_matrix[i][j - 1] + gap_penalty;
+            score_matrix[i][j] = std::max({0, diagonal_score, up_score, left_score});
 
-    /*Traceback max_score*/
-
-    int end_seq1 = 0, end_seq2 = 0;
-    for (int i = 1; i <= sequence_1.length(); i++) {
-        for (int j = 1; j <= sequence_2.length(); j++) {
-            if (score_matrix_h[i][j] > max_score) {
-                max_score = score_matrix_h[i][j];
-                end_seq1 = i;
-                end_seq2 = j;
+            if (score_matrix[i][j] > max_score) {
+                max_score = score_matrix[i][j];
+                end_i = i;
+                end_j = j;
             }
         }
     }
 
-    int i = end_seq1, j = end_seq2;
     std::string aligned_seq1, aligned_seq2;
+    int i = end_i, j = end_j;
 
-    while (i > 0 && j > 0 && score_matrix_h[i][j] > 0) {
-        if (score_matrix_h[i][j] == score_matrix_h[i - 1][j - 1] + (sequence_1[i - 1] == sequence_2[j - 1] ? match_score : mismatch_penalty)) {
-            aligned_seq1 = sequence_1[i - 1] + aligned_seq1;
-            aligned_seq2 = sequence_2[j - 1] + aligned_seq2;
+    while (i > 0 && j > 0 && score_matrix[i][j] > 0) {
+        int diagonal = score_matrix[i - 1][j - 1] + (sequence_1[i - 1] == sequence_2[j - 1] ? match_score : mismatch_penalty);
+        int up = score_matrix[i - 1][j] + gap_penalty;
+
+        if (score_matrix[i][j] == diagonal) {
+            aligned_seq1 += sequence_1[i - 1];
+            aligned_seq2 += sequence_2[j - 1];
             i--;
             j--;
         }
-        else if (score_matrix_h[i][j] == score_matrix_h[i - 1][j] + gap_penalty) {
-            aligned_seq1 = sequence_1[i - 1] + aligned_seq1;
-            aligned_seq2 = '-' + aligned_seq2;
+        else if (score_matrix[i][j] == up) {
+            aligned_seq1 += sequence_1[i - 1];
+            aligned_seq2 += '-';
             i--;
         }
         else {
-            aligned_seq1 = '-' + aligned_seq1;
-            aligned_seq2 = sequence_2[j - 1] + aligned_seq2;
+            aligned_seq1 += '-';
+            aligned_seq2 += sequence_2[j - 1];
             j--;
         }
     }
-    return {aligned_seq1, aligned_seq2, max_score, 0, 0, 0, 0};
+
+    std::reverse(aligned_seq1.begin(), aligned_seq1.end());
+    std::reverse(aligned_seq2.begin(), aligned_seq2.end());
+
+    return {aligned_seq1, aligned_seq2, max_score, i, end_i, j, end_j};
 }
 
 void read_file_fasta(const std::string &file_fasta, std::vector<FastaRecordStructure> &records) {
@@ -84,8 +86,15 @@ void read_file_fasta(const std::string &file_fasta, std::vector<FastaRecordStruc
         return;
     }
 
+    auto strip_cr = [](std::string &line) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+    };
+
     std::string line, sequence, header;
     while (std::getline(file, line)) {
+        strip_cr(line);
         if (line.empty()) {
             continue;
         }
@@ -95,9 +104,14 @@ void read_file_fasta(const std::string &file_fasta, std::vector<FastaRecordStruc
                 records.push_back({header, sequence});
                 sequence.clear();
             }
-            header = line.substr(1);
+            std::string raw_header = line.substr(1);
+            size_t first_space = raw_header.find(' ');
+            header = (first_space != std::string::npos) ? raw_header.substr(0, first_space) : raw_header;
         }
         else {
+            for (char &c : line) {
+                c = std::toupper((unsigned char)c);
+            }
             sequence += line;
         }
     }
@@ -118,6 +132,13 @@ int main(int argc, char *argv[]) {
     std::vector<FastaRecordStructure> records;
     std::string file_fasta = argv[1];
     read_file_fasta(file_fasta, records);
+
+    std::cout << "Number of records read: " << records.size() << std::endl;
+    for (const auto &record : records) {
+        std::cout << "Identifier: " << record.identifier << "\n";
+        // std::cout << "Sequence: " << record.sequence << "\n\n";
+        // std::cout << "sequence_1: " << record.sequence.substr(0, 10) << "...\n";
+    }
 
     // const int LIMIT = 100;
 
