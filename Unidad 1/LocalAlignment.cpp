@@ -76,7 +76,7 @@ AlignmentResult smith_waterman(const std::string &sequence_1, const std::string 
     std::reverse(aligned_seq1.begin(), aligned_seq1.end());
     std::reverse(aligned_seq2.begin(), aligned_seq2.end());
 
-    return {aligned_seq1, aligned_seq2, max_score, i, end_i, j, end_j};
+    return {aligned_seq1, aligned_seq2, max_score, i, end_i - 1, j, end_j - 1};
 }
 
 void read_file_fasta(const std::string &file_fasta, std::vector<FastaRecordStructure> &records) {
@@ -124,40 +124,33 @@ void read_file_fasta(const std::string &file_fasta, std::vector<FastaRecordStruc
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <file.fasta>" << std::endl;
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << " <file1.fasta> <file2.fasta>" << std::endl;
         return 1;
     }
 
-    std::vector<FastaRecordStructure> records;
-    std::string file_fasta = argv[1];
-    read_file_fasta(file_fasta, records);
+    std::vector<FastaRecordStructure> records1, records2;
+    read_file_fasta(argv[1], records1);
+    read_file_fasta(argv[2], records2);
 
-    std::cout << "Number of records read: " << records.size() << std::endl;
-    for (const auto &record : records) {
-        std::cout << "Identifier: " << record.identifier << "\n";
-        // std::cout << "Sequence: " << record.sequence << "\n\n";
-        // std::cout << "sequence_1: " << record.sequence.substr(0, 10) << "...\n";
+    std::cout << "Read " << records1.size() << " records from " << argv[1] << std::endl;
+    for (const auto &record : records1) {
+        std::cout << "Identifier: " << record.identifier << ", Sequence Length: " << record.sequence.length() << std::endl;
     }
+    
+    std::cout << "Read " << records2.size() << " records from " << argv[2] << std::endl;
+    for (const auto &record : records2) {
+        std::cout << "Identifier: " << record.identifier << ", Sequence Length: " << record.sequence.length() << std::endl;
+    }
+    std::cout << std::endl;
 
-    // const int LIMIT = 100;
-
-    // for (const auto &record : records) {
-        // std::cout << record.identifier << "\n";
-        // if (record.sequence.length() > LIMIT) {
-            // std::cout << record.sequence.substr(0, LIMIT) << "...\n";
-        // } else {
-            // std::cout << record.sequence << "\n";
-        // }
-    // }
-
-    for (size_t i = 0; i < records.size(); i++) {
-        for (size_t j = i + 1; j < records.size(); j++) {
-            AlignmentResult result = smith_waterman(records[i].sequence, records[j].sequence, MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY);
-            std::cout << "Alignment between " << records[i].identifier << " and " << records[j].identifier << ":\n";
+    for (const auto &record1 : records1) {
+        for (const auto &record2 : records2) {
+            AlignmentResult result = smith_waterman(record1.sequence, record2.sequence, MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY);
+            std::cout << "Alignment between " << record1.identifier << " and " << record2.identifier << ":\n";
             std::cout << "Score: " << result.score << "\n";
             std::cout << "Aligned Sequence 1: " << result.sequence_1 << "\n";
-            std::cout << "Aligned Sequence 2: " << result.sequence_2 << "\n";
+            std::cout << "Aligned Sequence 2: " << result.sequence_2 << "\n\n";
         }
     }
 
