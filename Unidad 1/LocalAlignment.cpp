@@ -8,6 +8,7 @@
 const int MATCH_SCORE = 2;
 const int MISMATCH_PENALTY = -1;
 const int GAP_PENALTY = -2;
+const int DISPLAY = 100;
 
 struct FastaRecordStructure {
     std::string identifier;
@@ -26,7 +27,7 @@ struct AlignmentResult {
 Smith Waterman algorithm for local sequence alignment. It finds the best local alignment between two sequences by constructing a scoring matrix and performing a traceback to identify the optimal alignment. The algorithm uses dynamic programming to efficiently compute the scores and alignments, allowing for gaps and mismatches in the sequences.
 */
 
-AlignmentResult smith_waterman(const std::string &sequence_1, const std::string &sequence_2, int match_score, int mismatch_penalty, int gap_penalty) {
+AlignmentResult smith_waterman(const std::string &sequence_1, const std::string &sequence_2, int match_score, int mismatch_penalty, int gap_penalty, const std::string &export_file = "") {
     int n = (int)sequence_1.length();
     int m = (int)sequence_2.length();
     int max_score = 0, end_i = 0, end_j = 0;
@@ -49,9 +50,11 @@ AlignmentResult smith_waterman(const std::string &sequence_1, const std::string 
     }
 
     std::string aligned_seq1, aligned_seq2;
+    std::vector<std::pair<int, int>> alignment_path;
     int i = end_i, j = end_j;
 
     while (i > 0 && j > 0 && score_matrix[i][j] > 0) {
+        alignment_path.push_back({i, j});
         int diagonal = score_matrix[i - 1][j - 1] + (sequence_1[i - 1] == sequence_2[j - 1] ? match_score : mismatch_penalty);
         int up = score_matrix[i - 1][j] + gap_penalty;
 
@@ -75,6 +78,36 @@ AlignmentResult smith_waterman(const std::string &sequence_1, const std::string 
 
     std::reverse(aligned_seq1.begin(), aligned_seq1.end());
     std::reverse(aligned_seq2.begin(), aligned_seq2.end());
+
+    if (!export_file.empty()) {
+        std::ofstream output(export_file);
+        if (output.is_open()) {
+            output << n << " " << m << "\n";
+            output << sequence_1 << "\n";
+            output << sequence_2 << "\n";
+
+            for (int r = 0; r <= n; r++) {
+                for (int c = 0; c <= m; c++) {
+                    output << score_matrix[r][c];
+                    if (c < m) {
+                        output << " ";
+                    }
+                }
+                output << "\n";
+            }
+
+            output << "PATH\n";
+            for (const auto &it : alignment_path) {
+                output << it.first << " " << it.second << "\n";
+            }
+            
+            output.close();
+            std::cout << "Alignment details exported to: " << export_file << std::endl;
+        }
+        else {
+            std::cerr << "Error opening file for writing: " << export_file << std::endl;
+        }
+    }
 
     return {aligned_seq1, aligned_seq2, max_score, i, end_i - 1, j, end_j - 1};
 }
@@ -146,11 +179,11 @@ int main(int argc, char *argv[]) {
 
     for (const auto &record1 : records1) {
         for (const auto &record2 : records2) {
-            AlignmentResult result = smith_waterman(record1.sequence, record2.sequence, MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY);
+            AlignmentResult result = smith_waterman(record1.sequence, record2.sequence, MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY, "Files/matrix_NC005089_vs_NC012920.txt");
             std::cout << "Alignment between " << record1.identifier << " and " << record2.identifier << ":\n";
             std::cout << "Score: " << result.score << "\n";
-            std::cout << "Aligned Sequence 1: " << result.sequence_1 << "\n";
-            std::cout << "Aligned Sequence 2: " << result.sequence_2 << "\n\n";
+            std::cout << "Start/End Seq1: [" << result.start_pos_seq1 << " - " << result.end_pos_seq1 << "]\n";
+            std::cout << "Start/End Seq2: [" << result.start_pos_seq2 << " - " << result.end_pos_seq2 << "]\n";
         }
     }
 
