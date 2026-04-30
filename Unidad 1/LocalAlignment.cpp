@@ -4,6 +4,7 @@
 #include <fstream>
 #include <algorithm>
 #include <iomanip>
+#include <chrono>
 
 const int MATCH_SCORE = 2;
 const int MISMATCH_PENALTY = -1;
@@ -221,6 +222,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    std::cout << "  Match score: " << MATCH_SCORE << "\n";
+    std::cout << "  Mismatch: " << MISMATCH_PENALTY << "\n";
+    std::cout << "  Gap penalty: " << GAP_PENALTY << "\n";
+
     std::vector<FastaRecordStructure> records1, records2;
     read_file_fasta(argv[1], records1);
     read_file_fasta(argv[2], records2);
@@ -232,7 +237,12 @@ int main(int argc, char *argv[]) {
         for (const auto &record2 : records2) {
             std::cout << "Aligning " << record1.identifier << " with " << record2.identifier << "..." << std::endl;
 
+            auto start = std::chrono::high_resolution_clock::now();
             AlignmentResult result = smith_waterman(record1.sequence, record2.sequence, MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY);
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed = end - start;
+            std::cout << "Time: " << std::fixed << std::setprecision(3) << elapsed.count() << " seconds\n\n";
+            
             std::string base_path = "File txt/alignment_" + record1.identifier + "_" + record2.identifier;
             export_alignment(result, base_path);
             export_aligned_sequences(result, base_path + "_aligned.txt");
