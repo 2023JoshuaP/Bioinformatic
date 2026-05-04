@@ -145,63 +145,59 @@ AlignmentResult needleman_wunsch(const string &sequence1, const string &sequence
     return {aligned_sequence1, aligned_sequence2, score_matrix[n][m], 0, n - 1, 0, m - 1, score_matrix, {}};
 }
 
-void print_alignment(const AlignmentResult &res,
-                     const string &header1, const string &header2) {
-    int len = (int)res.aligned_seq1.size();
- 
-    // Línea de identidad y estadísticas
-    string identity_line(len, ' ');
-    int matches = 0, mismatches = 0, gaps = 0;
-    for (int k = 0; k < len; k++) {
-        char c1 = res.aligned_seq1[k], c2 = res.aligned_seq2[k];
-        if (c1 == '-' || c2 == '-')          { gaps++;       identity_line[k] = ' '; }
-        else if (c1 == c2)                    { matches++;    identity_line[k] = '|'; }
-        else                                  { mismatches++; identity_line[k] = '.'; }
+void save_alignment(const AlignmentResult &result, const string &header1, const string &header2) {
+    string base_path = "File txt/" + header1 + "_vs_" + header2 + "_alignment";
+    
+    {
+        string csv_path = base_path + "_matrix.csv";
+        ofstream csv_file(csv_path);
+        
+        if (!csv_file.is_open()) {
+            cerr << "Error opening file for writing: " << csv_path << endl;
+            return;
+        }
+
+        int n = (int)result.score_matrix.size();
+        int m = (int)result.score_matrix[0].size();
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                csv_file << result.score_matrix[i][j];
+                if (j < m - 1) {
+                    csv_file << ",";
+                }
+            }
+            csv_file << "\n";
+        }
+        csv_file.close();
+        cout << "Matrix saved to: " << csv_path << endl;
     }
- 
-    double pct_id = 100.0 * matches / len;
- 
-    // ── Cabecera ──
-    cout << "\n";
-    cout << "------------------------------------------------------------\n";
-    cout << "          NEEDLEMAN-WUNSCH  |  Alineamiento Global\n";
-    cout << "------------------------------------------------------------\n";
-    cout << "  Seq 1 : " << header1 << "\n";
-    cout << "  Seq 2 : " << header2 << "\n";
-    cout << "  Score : " << res.score << "\n";
-    cout << "------------------------------------------------------------\n";
-    cout << "  Identidad  : " << matches << "/" << len
-         << " (" << fixed << setprecision(1) << pct_id << "%)\n";
-    cout << "  Mismatches : " << mismatches << "\n";
-    cout << "  Gaps       : " << gaps << "\n";
-    cout << "------------------------------------------------------------\n\n";
- 
-    // ── Alineamiento por bloques ──
-    int pos1 = 1, pos2 = 1;
-    for (int start = 0; start < len; start += LINE_WIDTH) {
-        int end = min(start + LINE_WIDTH, len);
-        string block1 = res.aligned_seq1.substr(start, end - start);
-        string block2 = res.aligned_seq2.substr(start, end - start);
-        string blockI = identity_line.substr(start, end - start);
- 
-        // Contar posición real (sin gaps)
-        int end_pos1 = pos1, end_pos2 = pos2;
-        for (char c : block1) if (c != '-') end_pos1++;
-        for (char c : block2) if (c != '-') end_pos2++;
- 
-        cout << "Seq1  " << setw(5) << pos1 << "  " << block1 << "  " << end_pos1 - 1 << "\n";
-        cout << "           " << blockI << "\n";
-        cout << "Seq2  " << setw(5) << pos2 << "  " << block2 << "  " << end_pos2 - 1 << "\n\n";
- 
-        pos1 = end_pos1;
-        pos2 = end_pos2;
+
+    {
+        string txt_path = base_path + "_alignment.txt";
+        ofstream txt_file(txt_path);
+
+        if (!txt_file.is_open()) {
+            cerr << "Error opening file for writing: " << txt_path << endl;
+            return;
+        }
+
+        txt_file << "Score: " << result.score << "\n";
+        
+        int len = (int)result.aligned_seq1.size();
+        for (int i = 0; i < len; i += LINE_WIDTH) {
+            int end = min(i + LINE_WIDTH, len);
+            txt_file << result.aligned_seq1.substr(i, end - i) << "\n";
+            txt_file << result.aligned_seq2.substr(i, end - i) << "\n\n";
+        }
+
+        txt_file.close();
+        cout << "Alignment saved to: " << txt_path << endl;
     }
-    cout << "------------------------------------------------------------\n\n";
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        cerr << "Uso: " << argv[0] << " <archivo1.fasta> <archivo2.fasta>\n";
+        cerr << "Usage: " << argv[0] << " <file1.fasta> <file2.fasta>\n";
         return 1;
     }
  
@@ -210,7 +206,7 @@ int main(int argc, char *argv[]) {
     read_fasta(argv[2], sequences2);
  
     if (sequences1.empty() || sequences2.empty()) {
-        cerr << "Error: no se pudieron leer las secuencias.\n";
+        cerr << "Error opening files.\n";
         return 1;
     }
  
@@ -219,8 +215,8 @@ int main(int argc, char *argv[]) {
         sequences2[0].sequence,
         MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY
     );
- 
-    print_alignment(result, sequences1[0].header, sequences2[0].header);
+
+    save_alignment(result, sequences1[0].header, sequences2[0].header);
  
     return 0;
 }
