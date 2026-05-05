@@ -3,10 +3,11 @@
 #include <vector>
 #include <algorithm>
 #include <iomanip>
+#include <chrono>
 using namespace std;
 
 const int LINE_WIDTH = 60;
-const int MATCH_SCORE = 1;
+const int MATCH_SCORE = 2;
 const int MISMATCH_PENALTY = -1;
 const int GAP_PENALTY = -2;
 
@@ -181,13 +182,32 @@ void save_alignment(const AlignmentResult &result, const string &header1, const 
             return;
         }
 
-        txt_file << "Score: " << result.score << "\n";
+        txt_file << "Score: " << result.score << "\n\n";
         
         int len = (int)result.aligned_seq1.size();
+
         for (int i = 0; i < len; i += LINE_WIDTH) {
             int end = min(i + LINE_WIDTH, len);
-            txt_file << result.aligned_seq1.substr(i, end - i) << "\n";
-            txt_file << result.aligned_seq2.substr(i, end - i) << "\n\n";
+
+            string seq1 = result.aligned_seq1.substr(i, end - i);
+            string seq2 = result.aligned_seq2.substr(i, end - i);
+
+            string match_line;
+            for (int k = 0; k < (int)seq1.size(); k++) {
+                if (seq1[k] == seq2[k]) {
+                    match_line += '|';
+                } 
+                else if (seq1[k] == '-' || seq2[k] == '-') {
+                    match_line += ' ';
+                } 
+                else {
+                    match_line += '.';
+                }
+            }
+
+            txt_file << seq1 << "\n";
+            txt_file << match_line << "\n";
+            txt_file << seq2 << "\n\n";
         }
 
         txt_file.close();
@@ -210,11 +230,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
  
+    auto start = chrono::high_resolution_clock::now();
     AlignmentResult result = needleman_wunsch(
         sequences1[0].sequence,
         sequences2[0].sequence,
         MATCH_SCORE, MISMATCH_PENALTY, GAP_PENALTY
     );
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> elapsed = end - start;
+    cout << "Time: " << fixed << setprecision(3) << elapsed.count() << " seconds\n";
 
     save_alignment(result, sequences1[0].header, sequences2[0].header);
  
