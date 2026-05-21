@@ -4,3 +4,7 @@ test.cpp
 File txt/
 Pruebas/
 Diapositivas/
+Results/
+Unidad 2/Results/
+*.png
+*.csv
