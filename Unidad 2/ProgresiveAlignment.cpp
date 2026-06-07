@@ -82,10 +82,44 @@ AlignmentResult needle_wunsch(const string &seq1, const string &seq2, int match,
     int i = n, j = m;
 
     while (i > 0 || j > 0) {
-        int score_diagonal = score_matrix[i - 1][j - 1] + (seq1[i - 1] == seq2[j - 1] ? match : mismatch);
-        int score_up = score_matrix[i - 1][j] + gap;
-        int score_left = score_matrix[i][j - 1] + gap;
+        if (i > 0 && j > 0) {
+            int score_diagonal = score_matrix[i - 1][j - 1] + (seq1[i - 1] == seq2[j - 1] ? match : mismatch);
+            int score_up = score_matrix[i - 1][j] + gap;
+            int score_left = score_matrix[i][j - 1] + gap;
+
+            if (score_matrix[i][j] == score_diagonal) {
+                aligned_seq1 += seq1[i - 1];
+                aligned_seq2 += seq2[j - 1];
+                i--;
+                j--;
+            }
+            else if (score_matrix[i][j] == score_up) {
+                aligned_seq1 += seq1[i - 1];
+                aligned_seq2 += '-';
+                i--;
+            }
+            else {
+                aligned_seq1 += '-';
+                aligned_seq2 += seq2[j - 1];
+                j--;
+            }
+        }
+        else if (i > 0) {
+            aligned_seq1 += seq1[i - 1];
+            aligned_seq2 += '-';
+            i--;
+        }
+        else {
+            aligned_seq1 += '-';
+            aligned_seq2 += seq2[j - 1];
+            j--;
+        }
     }
+
+    reverse(aligned_seq1.begin(), aligned_seq1.end());
+    reverse(aligned_seq2.begin(), aligned_seq2.end());
+
+    return {aligned_seq1, aligned_seq2, score_matrix[n][m]};
 }
 
 int main(int argc, char *argv[]) {
