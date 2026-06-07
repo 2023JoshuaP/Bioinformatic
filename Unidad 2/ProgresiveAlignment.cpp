@@ -7,6 +7,10 @@
 
 using namespace std;
 
+const int MATCH = 1;
+const int MISMATCH = -1;
+const int GAP = -2;
+
 struct FastaSequence {
     string header;
     string sequence;
@@ -120,6 +124,29 @@ AlignmentResult needle_wunsch(const string &seq1, const string &seq2, int match,
     reverse(aligned_seq2.begin(), aligned_seq2.end());
 
     return {aligned_seq1, aligned_seq2, score_matrix[n][m]};
+}
+
+/* Distance Matrix */
+vector<vector<double>> computeDistanceMatrix(const vector<FastaSequence> &sequences) {
+    int n = sequences.size();
+    vector<vector<double>> distance_matrix(n, vector<double>(n, 0.0));
+    vector<int> self_scores(n, 0);
+
+    for (int i = 0; i < n; i++) {
+        self_scores[i] = needle_wunsch(sequences[i].sequence, sequences[i].sequence, MATCH, MISMATCH, GAP).score;
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            AlignmentResult result = needle_wunsch(sequences[i].sequence, sequences[j].sequence, MATCH, MISMATCH, GAP);
+            double distance = 1.0 - (static_cast<double>(result.score) / max(self_scores[i], self_scores[j]));
+
+            distance_matrix[i][j] = distance;
+            distance_matrix[j][i] = distance;
+        }
+    }
+
+    return distance_matrix;
 }
 
 int main(int argc, char *argv[]) {
