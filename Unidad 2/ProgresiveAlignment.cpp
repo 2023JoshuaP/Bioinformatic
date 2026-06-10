@@ -275,14 +275,14 @@ vector<string> replaceX(const vector<string> &aligned_sequences) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 6) {
-        cerr << "Usage: " << argv[0] << " <fasta_file1> <fasta_file2> <fasta_file3> <fasta_file4> <fasta_file5>" << endl;
+    if (argc < 2) {
+        cerr << "Usage: " << argv[0] << " <fasta_file1> <fasta_file2> ... <fasta_fileN>" << endl;
         return 1;
     }
 
     vector<FastaSequence> sequences;
 
-    for (int i = 1; i <= 5; i++) {
+    for (int i = 1; i < argc; i++) {
         string file_sequence = argv[i];
         vector<FastaSequence> file_sequences = readFileFasta(file_sequence);
 
