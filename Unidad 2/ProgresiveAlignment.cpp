@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <limits>
+#include <iomanip>
 
 using namespace std;
 
@@ -267,14 +268,59 @@ vector<string> replaceX(const vector<string> &aligned_sequences) {
     for (const string &seq : aligned_sequences) {
         string clean = "";
         for (char c : seq)
-            if (c != 'X') {
-                clean += (c == 'X') ? '-' : c;
-            }
+            clean += (c == 'X') ? '-' : c;
         result.push_back(clean);
     }
     return result;
 }
 
 int main(int argc, char *argv[]) {
+    if (argc < 6) {
+        cerr << "Usage: " << argv[0] << " <fasta_file1> <fasta_file2> <fasta_file3> <fasta_file4> <fasta_file5>" << endl;
+        return 1;
+    }
+
+    vector<FastaSequence> sequences;
+
+    for (int i = 1; i <= 5; i++) {
+        string file_sequence = argv[i];
+        vector<FastaSequence> file_sequences = readFileFasta(file_sequence);
+
+        if (file_sequences.empty()) {
+            cerr << "No sequences found in file: " << file_sequence << endl;
+            return 1;
+        }
+
+        sequences.insert(sequences.end(), file_sequences.begin(), file_sequences.end());
+    }
+
+    cout << "Loaded " << sequences.size() << " sequences." << endl;
+
+    vector<vector<double>> distance_matrix = computeDistanceMatrix(sequences);
+
+    cout << "Distance matrix computed." << endl;
+    for (int i = 0; i < (int)sequences.size(); i++) {
+        for (int j = 0; j < (int)sequences.size(); j++) {
+            cout << fixed << setprecision(2) << distance_matrix[i][j] << " ";
+        }
+        cout << endl;
+    }
+
+    vector<vector<double>> distance_matrix_copy = distance_matrix;
+    vector<GuideTree> guide_tree = computeUPGMA(distance_matrix_copy, sequences.size());
+
+    cout << "Guide tree computed." << endl;
+    for (int i = 0; i < (int)guide_tree.size(); i++) {
+        cout << "Step " << i + 1 << ": merge sequences " << guide_tree[i].sequence_index1 << " (" << sequences[guide_tree[i].sequence_index1].header << ") with " << guide_tree[i].sequence_index2 << " (" << sequences[guide_tree[i].sequence_index2].header << ")" << endl;
+    }
+
+    vector<string> aligned_sequences = performMSA(sequences, guide_tree);
+    aligned_sequences = replaceX(aligned_sequences);
+
+    cout << "Final MSA:" << endl;
+    for (size_t i = 0; i < aligned_sequences.size(); i++) {
+        cout << "Sequence " << i + 1 << ": " << aligned_sequences[i] << endl;
+    }
+
     return 0;
 }
