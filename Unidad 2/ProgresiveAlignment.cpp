@@ -157,17 +157,19 @@ vector<vector<double>> computeDistanceMatrix(const vector<FastaSequence> &sequen
     return distance_matrix;
 }
 
+/* Calculate UPGMA */
 vector<GuideTree> computeUPGMA(vector<vector<double>> &distance_matrix, int n) {
     vector<GuideTree> guide_tree;
     vector<int> cluster_sizes(n, 1);
-    vector<bool> active(n, false);
+    vector<bool> active(n, true);          // ✅ all start active
 
     for (int step = 0; step < n - 1; step++) {
         int min_i = -1, min_j = -1;
         double min_distance = numeric_limits<double>::max();
+
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
-                if (!active[i] && !active[j] && distance_matrix[i][j] < min_distance) {
+                if (active[i] && active[j] && distance_matrix[i][j] < min_distance) {  // ✅
                     min_distance = distance_matrix[i][j];
                     min_i = i;
                     min_j = j;
@@ -181,7 +183,10 @@ vector<GuideTree> computeUPGMA(vector<vector<double>> &distance_matrix, int n) {
             if (!active[k] || k == min_i || k == min_j) {
                 continue;
             }
-            distance_matrix[min_i][k] = distance_matrix[k][min_i] = (cluster_sizes[min_i] * distance_matrix[min_i][k] + cluster_sizes[min_j] * distance_matrix[min_j][k]) / (cluster_sizes[min_i] + cluster_sizes[min_j]);
+            distance_matrix[min_i][k] = distance_matrix[k][min_i] =
+                (cluster_sizes[min_i] * distance_matrix[min_i][k] +
+                 cluster_sizes[min_j] * distance_matrix[min_j][k]) /
+                (cluster_sizes[min_i] + cluster_sizes[min_j]);
         }
 
         cluster_sizes[min_i] += cluster_sizes[min_j];
@@ -189,6 +194,67 @@ vector<GuideTree> computeUPGMA(vector<vector<double>> &distance_matrix, int n) {
     }
 
     return guide_tree;
+}
+
+/* Process gaps */
+vector<string> applyGaps(const vector<string> &group, const string &aligned_rap) {
+    vector<string> result;
+
+    for (const string &sequence : group) {
+        string new_sequence = "";
+        int sequence_index = 0;
+
+        for (char c : aligned_rap) {
+            if (c == '-') {
+                new_sequence += '-';
+            }
+            else {
+                new_sequence += sequence[sequence_index];
+                sequence_index++;
+            }
+        }
+        result.push_back(new_sequence);
+    }
+
+    return result;
+}
+
+vector<string> mergeGroups(const vector<string> &group1, const vector<string> &group2) {
+    string rep_a = group1[0];
+    string rep_b = group2[0];
+
+    AlignmentResult result = needle_wunsch(rep_a, rep_b, MATCH, MISMATCH, GAP);
+
+    vector<string> aligned_group1 = applyGaps(group1, result.aligned_seq1);
+    vector<string> aligned_group2 = applyGaps(group2, result.aligned_seq2);
+
+    vector<string> merged;
+    merged.insert(merged.end(), aligned_group1.begin(), aligned_group1.end());
+    merged.insert(merged.end(), aligned_group2.begin(), aligned_group2.end());
+
+    return merged;
+}
+
+/* Guide tree to drive merges */
+vector<string> performMSA(const vector<FastaSequence> &sequences, const vector<GuideTree> &guide_tree) {
+    vector<vector<string>> groups;
+    for (const auto &seq : sequences) {
+        groups.push_back({seq.sequence});
+    }
+
+    for (const auto &merge : guide_tree) {
+        vector<string> merged_groups = mergeGroups(groups[merge.sequence_index1], groups[merge.sequence_index2]);
+        groups[merge.sequence_index1] = merged_groups;
+        groups[merge.sequence_index2] = {};
+    }
+
+    for (const auto &group : groups) {
+        if (!group.empty()) {
+            return group;
+        }
+    }
+
+    return {};
 }
 
 int main(int argc, char *argv[]) {
