@@ -275,52 +275,116 @@ vector<string> replaceX(const vector<string> &aligned_sequences) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <fasta_file1> <fasta_file2> ... <fasta_fileN>" << endl;
+    if (argc < 3) {
+        cerr << "Usage: " << argv[0] << " <output.txt> <fasta_file1> ... <fasta_fileN>" << endl;
         return 1;
     }
 
-    vector<FastaSequence> sequences;
+    string output_filename = argv[1];
+    ofstream output_file(output_filename);
+    if (!output_file.is_open()) {
+        cerr << "Error opening output file: " << output_filename << endl;
+        return 1;
+    }
 
-    for (int i = 1; i < argc; i++) {
+    auto log = [&](const string &text) {
+        cout << text;
+        output_file << text;
+    };
+
+    vector<FastaSequence> sequences;
+    for (int i = 2; i < argc; i++) {
         string file_sequence = argv[i];
         vector<FastaSequence> file_sequences = readFileFasta(file_sequence);
-
         if (file_sequences.empty()) {
             cerr << "No sequences found in file: " << file_sequence << endl;
             return 1;
         }
-
         sequences.insert(sequences.end(), file_sequences.begin(), file_sequences.end());
     }
-
-    cout << "Loaded " << sequences.size() << " sequences." << endl;
+    log("Loaded " + to_string(sequences.size()) + " sequences.\n");
 
     vector<vector<double>> distance_matrix = computeDistanceMatrix(sequences);
 
-    cout << "Distance matrix computed." << endl;
+    log("\n=== Initial Distance Matrix ===\n");
     for (int i = 0; i < (int)sequences.size(); i++) {
         for (int j = 0; j < (int)sequences.size(); j++) {
-            cout << fixed << setprecision(2) << distance_matrix[i][j] << " ";
+            ostringstream oss;
+            oss << fixed << setprecision(4) << distance_matrix[i][j] << " ";
+            log(oss.str());
         }
-        cout << endl;
+        log("\n");
     }
 
-    vector<vector<double>> distance_matrix_copy = distance_matrix;
-    vector<GuideTree> guide_tree = computeUPGMA(distance_matrix_copy, sequences.size());
+    vector<vector<double>> dist_copy = distance_matrix;
+    vector<GuideTree> guide_tree = computeUPGMA(dist_copy, sequences.size());
 
-    cout << "Guide tree computed." << endl;
-    for (int i = 0; i < (int)guide_tree.size(); i++) {
-        cout << "Step " << i + 1 << ": merge sequences " << guide_tree[i].sequence_index1 << " (" << sequences[guide_tree[i].sequence_index1].header << ") with " << guide_tree[i].sequence_index2 << " (" << sequences[guide_tree[i].sequence_index2].header << ")" << endl;
+    log("\n=== UPGMA Guide Tree ===\n");
+    int n = sequences.size();
+    vector<vector<double>> dist_log = distance_matrix;
+    vector<int> cluster_sizes_log(n, 1);
+    vector<bool> active_log(n, true);
+
+    for (int step = 0; step < (int)guide_tree.size(); step++) {
+        int min_i = guide_tree[step].sequence_index1;
+        int min_j = guide_tree[step].sequence_index2;
+        double min_distance = dist_log[min_i][min_j];
+
+        ostringstream step_log;
+        step_log << "\nStep " << step + 1 << ": merge seq " << min_i
+                 << " (" << sequences[min_i].header << ") with seq " << min_j
+                 << " (" << sequences[min_j].header << ")"
+                 << " | distance: " << fixed << setprecision(2) << min_distance << "\n";
+        log(step_log.str());
+
+        for (int k = 0; k < n; k++) {
+            if (!active_log[k] || k == min_i || k == min_j) continue;
+            dist_log[min_i][k] = dist_log[k][min_i] =
+                (cluster_sizes_log[min_i] * dist_log[min_i][k] +
+                 cluster_sizes_log[min_j] * dist_log[min_j][k]) /
+                (cluster_sizes_log[min_i] + cluster_sizes_log[min_j]);
+        }
+        cluster_sizes_log[min_i] += cluster_sizes_log[min_j];
+        active_log[min_j] = false;
+
+        log("Updated Distance Matrix:\n");
+        for (int i = 0; i < n; i++) {
+            if (!active_log[i]) continue;
+            for (int j = 0; j < n; j++) {
+                if (!active_log[j]) continue;
+                ostringstream oss;
+                oss << fixed << setprecision(4) << dist_log[i][j] << " ";
+                log(oss.str());
+            }
+            log("\n");
+        }
     }
 
     vector<string> aligned_sequences = performMSA(sequences, guide_tree);
     aligned_sequences = replaceX(aligned_sequences);
 
-    cout << "Final MSA:" << endl;
+    log("\n=== Final MSA ===\n");
     for (size_t i = 0; i < aligned_sequences.size(); i++) {
-        cout << "Sequence " << i + 1 << ": " << aligned_sequences[i] << endl;
+        log(">" + sequences[i].header + "\n");
+        log(aligned_sequences[i] + "\n");
     }
+
+    output_file << "\nGuide Tree Data\n";
+    output_file << "Sequences\n";
+    for (int i = 0; i < (int)sequences.size(); i++) {
+        output_file << i << " " << sequences[i].header << "\n";
+    }
+    output_file << "Merges\n";
+    for (int step = 0; step < (int)guide_tree.size(); step++) {
+        int min_i = guide_tree[step].sequence_index1;
+        int min_j = guide_tree[step].sequence_index2;
+        double dist = dist_log[min_i][min_j];
+        output_file << min_i << " " << min_j << " " << fixed << setprecision(2) << distance_matrix[min_i][min_j] << "\n";
+    }
+    output_file << "end\n";
+
+    output_file.close();
+    cout << "Alignment completed. Results saved to " << output_filename << endl;
 
     return 0;
 }
