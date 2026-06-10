@@ -262,12 +262,14 @@ vector<string> performMSA(const vector<FastaSequence> &sequences, const vector<G
 }
 
 /* Final step - remove characters X */
-vector<string> removeX(const vector<string> &aligned_sequences) {
+vector<string> replaceX(const vector<string> &aligned_sequences) {
     vector<string> result;
     for (const string &seq : aligned_sequences) {
         string clean = "";
         for (char c : seq)
-            if (c != 'X') clean += c;
+            if (c != 'X') {
+                clean += (c == 'X') ? '-' : c;
+            }
         result.push_back(clean);
     }
     return result;
