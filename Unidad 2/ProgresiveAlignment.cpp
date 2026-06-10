@@ -66,26 +66,28 @@ vector<FastaSequence> readFileFasta(const string &filename) {
     return sequences;
 }
 
-AlignmentResult needle_wunsch(const string &seq1, const string &seq2, int match, int mismatch, int gap) {
+AlignmentResult needle_wunsch(const string &seq1, const string &seq2, int match, int mismatch, int gap, bool use_model_x) {
     int n = seq1.size();
     int m = seq2.size();
 
     vector<vector<int>> score_matrix(n + 1, vector<int>(m + 1, 0));
 
     for (int i = 0; i <= n; i++) {
-        score_matrix[i][0] = i * gap;
+        score_matrix[i][0] = i * (use_model_x ? 1 : gap);
     }
     for (int j = 0; j <= m; j++) {
-        score_matrix[0][j] = j * gap;
+        score_matrix[0][j] = j * (use_model_x ? 1 : gap);
     }
 
     for (int i = 1; i <= n; i++) {
         for (int j = 1; j <= m; j++) {
-            int score_diagonal = score_matrix[i - 1][j - 1] + (seq1[i - 1] == seq2[j - 1] ? match : mismatch);
-            int score_up = score_matrix[i - 1][j] + gap;
-            int score_left = score_matrix[i][j - 1] + gap;
+            int cost = use_model_x ? ((seq1[i-1] == 'X' || seq2[j-1] == 'X') ? 0 : (seq1[i-1] == seq2[j-1] ? 0 : 1)) : (seq1[i-1] == seq2[j-1] ? match : mismatch);
 
-            score_matrix[i][j] = max({score_diagonal, score_up, score_left});
+            int score_diagonal = score_matrix[i - 1][j - 1] + cost;
+            int score_up = score_matrix[i - 1][j] + (use_model_x ? 1 : gap);
+            int score_left = score_matrix[i][j - 1] + (use_model_x ? 1 : gap);
+
+            score_matrix[i][j] = use_model_x ? min({score_diagonal, score_up, score_left}) : max({score_diagonal, score_up, score_left});
         }
     }
 
@@ -95,9 +97,11 @@ AlignmentResult needle_wunsch(const string &seq1, const string &seq2, int match,
 
     while (i > 0 || j > 0) {
         if (i > 0 && j > 0) {
-            int score_diagonal = score_matrix[i - 1][j - 1] + (seq1[i - 1] == seq2[j - 1] ? match : mismatch);
-            int score_up = score_matrix[i - 1][j] + gap;
-            int score_left = score_matrix[i][j - 1] + gap;
+            int cost = use_model_x ? ((seq1[i-1] == 'X' || seq2[j-1] == 'X') ? 0 : (seq1[i-1] == seq2[j-1] ? 0 : 1)) : (seq1[i-1] == seq2[j-1] ? match : mismatch);
+
+            int score_diagonal = score_matrix[i - 1][j - 1] + cost;
+            int score_up = score_matrix[i - 1][j] + (use_model_x ? 1 : gap);
+            int score_left = score_matrix[i][j - 1] + (use_model_x ? 1 : gap);
 
             if (score_matrix[i][j] == score_diagonal) {
                 aligned_seq1 += seq1[i - 1];
@@ -141,12 +145,12 @@ vector<vector<double>> computeDistanceMatrix(const vector<FastaSequence> &sequen
     vector<int> self_scores(n, 0);
 
     for (int i = 0; i < n; i++) {
-        self_scores[i] = needle_wunsch(sequences[i].sequence, sequences[i].sequence, MATCH, MISMATCH, GAP).score;
+        self_scores[i] = needle_wunsch(sequences[i].sequence, sequences[i].sequence, MATCH, MISMATCH, GAP, false).score;
     }
 
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
-            AlignmentResult result = needle_wunsch(sequences[i].sequence, sequences[j].sequence, MATCH, MISMATCH, GAP);
+            AlignmentResult result = needle_wunsch(sequences[i].sequence, sequences[j].sequence, MATCH, MISMATCH, GAP, false);
             double distance = 1.0 - (static_cast<double>(result.score) / max(self_scores[i], self_scores[j]));
 
             distance_matrix[i][j] = distance;
@@ -161,7 +165,7 @@ vector<vector<double>> computeDistanceMatrix(const vector<FastaSequence> &sequen
 vector<GuideTree> computeUPGMA(vector<vector<double>> &distance_matrix, int n) {
     vector<GuideTree> guide_tree;
     vector<int> cluster_sizes(n, 1);
-    vector<bool> active(n, true);          // ✅ all start active
+    vector<bool> active(n, true);
 
     for (int step = 0; step < n - 1; step++) {
         int min_i = -1, min_j = -1;
@@ -169,7 +173,7 @@ vector<GuideTree> computeUPGMA(vector<vector<double>> &distance_matrix, int n) {
 
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
-                if (active[i] && active[j] && distance_matrix[i][j] < min_distance) {  // ✅
+                if (active[i] && active[j] && distance_matrix[i][j] < min_distance) { 
                     min_distance = distance_matrix[i][j];
                     min_i = i;
                     min_j = j;
@@ -223,7 +227,7 @@ vector<string> mergeGroups(const vector<string> &group1, const vector<string> &g
     string rep_a = group1[0];
     string rep_b = group2[0];
 
-    AlignmentResult result = needle_wunsch(rep_a, rep_b, MATCH, MISMATCH, GAP);
+    AlignmentResult result = needle_wunsch(rep_a, rep_b, 0, 1, 1, true);
 
     vector<string> aligned_group1 = applyGaps(group1, result.aligned_seq1);
     vector<string> aligned_group2 = applyGaps(group2, result.aligned_seq2);
@@ -255,6 +259,18 @@ vector<string> performMSA(const vector<FastaSequence> &sequences, const vector<G
     }
 
     return {};
+}
+
+/* Final step - remove characters X */
+vector<string> removeX(const vector<string> &aligned_sequences) {
+    vector<string> result;
+    for (const string &seq : aligned_sequences) {
+        string clean = "";
+        for (char c : seq)
+            if (c != 'X') clean += c;
+        result.push_back(clean);
+    }
+    return result;
 }
 
 int main(int argc, char *argv[]) {
