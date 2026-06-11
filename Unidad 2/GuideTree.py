@@ -61,12 +61,11 @@ def parse_results(filename):
 
 def get_leaf_order(sequences, merges):
     clusters = {idx: [idx] for idx in sequences.keys()}
-
-    for idx_a, idx_b, _ in merges:
+    # Sort merges by distance so leaf ordering respects actual tree topology
+    for _, (idx_a, idx_b, _) in sorted(enumerate(merges), key=lambda t: t[1][2]):
         merged = clusters[idx_a] + clusters[idx_b]
         clusters[idx_a] = merged
         clusters[idx_b] = []
-
     for idx in sequences.keys():
         if clusters[idx]:
             return clusters[idx]
@@ -81,60 +80,65 @@ def draw_tree(sequences, merges):
     n = len(sequences)
     colors = ['#E63946', '#2A9D8F', '#E9C46A', '#F4A261', '#6A4C93', '#457B9D']
 
-    # Ordenar hojas segun merges
+    # Y positions
     leaf_order = get_leaf_order(sequences, merges)
     y_positions = {idx: (n - i) * 3.0 for i, idx in enumerate(leaf_order)}
 
-    # Normalizar distancias al ancho util [0.5, 0.95]
+    # X scale: leaves at 0 (left), root at 1.0 (right)
     all_dists = [d for _, _, d in merges]
-    min_d, max_d = min(all_dists), max(all_dists)
+    max_d = max(all_dists)
 
-    def norm(d):
-        if max_d == min_d:
-            return 0.7
-        return 0.5 + (d - min_d) / (max_d - min_d) * 0.45
+    LABEL_X = 0.0
+    ROOT_X  = 1.0
 
-    LEAF_X = 0.32
+    def dist_to_x(d):
+        if max_d == 0:
+            return ROOT_X * 0.5
+        return (d / max_d) * ROOT_X
 
-    # Etiquetas hojas
+    # Draw leaf labels
     for idx, name in sequences.items():
-        ax.text(LEAF_X - 0.01, y_positions[idx], name,
+        ax.text(LABEL_X - 0.01, y_positions[idx], name,
                 ha='right', va='center', fontsize=10,
                 bbox=dict(boxstyle='round,pad=0.4', facecolor='#AED6F1',
                           edgecolor='#2E86C1', linewidth=1.5))
 
     node_y = dict(y_positions)
-    node_x = {idx: LEAF_X for idx in sequences}
+    node_x = {idx: LABEL_X for idx in sequences}
 
-    for step, (idx_a, idx_b, dist) in enumerate(merges):
-        color = colors[step % len(colors)]
-        x_merge = norm(dist)
-        y_a = node_y[idx_a]
-        y_b = node_y[idx_b]
-        x_a = node_x[idx_a]
-        x_b = node_x[idx_b]
-        y_new = (y_a + y_b) / 2.0
+    # Sort merges by distance (ascending) so x positions are always non-decreasing.
+    # Keep orig_step for label / color so S1/S2/… stay correct.
+    sorted_merges = sorted(enumerate(merges), key=lambda t: t[1][2])
 
-        # Rama A horizontal
+    for orig_step, (idx_a, idx_b, dist) in sorted_merges:
+        color   = colors[orig_step % len(colors)]
+        x_merge = dist_to_x(dist)
+        y_a     = node_y[idx_a]
+        y_b     = node_y[idx_b]
+        x_a     = node_x[idx_a]
+        x_b     = node_x[idx_b]
+        y_new   = (y_a + y_b) / 2.0
+
+        # Horizontal arms from each child to the merge bar
         ax.plot([x_a, x_merge], [y_a, y_a], color=color, lw=2.5, solid_capstyle='round')
-        # Rama B horizontal
         ax.plot([x_b, x_merge], [y_b, y_b], color=color, lw=2.5, solid_capstyle='round')
-        # Vertical
+        # Vertical bar
         ax.plot([x_merge, x_merge], [y_b, y_a], color=color, lw=2.5, solid_capstyle='round')
-        # Nodo
+        # Dot at midpoint
         ax.plot(x_merge, y_new, 'o', color=color, markersize=9, zorder=5,
                 markeredgecolor='white', markeredgewidth=1.5)
-        # Etiqueta
-        ax.text(x_merge + 0.012, y_new + 0.25,
-                f"S{step+1}  d={dist:.2f}",
+        # Label
+        ax.text(x_merge + 0.015, y_new + 0.2,
+                f"S{orig_step+1}  d={dist:.2f}",
                 fontsize=8, color='white', ha='left', va='bottom', zorder=6,
                 bbox=dict(boxstyle='round,pad=0.3', facecolor=color,
                           edgecolor='none', alpha=0.9))
 
+        # Update merged cluster representative
         node_y[idx_a] = y_new
         node_x[idx_a] = x_merge
 
-    # Leyenda
+    # Legend (in original step order)
     patches = [
         mpatches.Patch(color=colors[i % len(colors)],
                        label=f"S{i+1}: {sequences[merges[i][0]]} + {sequences[merges[i][1]]}")
@@ -143,7 +147,7 @@ def draw_tree(sequences, merges):
     ax.legend(handles=patches, loc='lower right', fontsize=9,
               framealpha=0.9, title="Merge steps")
 
-    ax.set_xlim(0.0, 1.1)
+    ax.set_xlim(-0.45, ROOT_X + 0.15)
     ax.set_ylim(0.5, (n + 1) * 3.0)
 
     plt.tight_layout()
